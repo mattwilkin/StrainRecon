@@ -109,11 +109,15 @@ class Initializer:
         copy()
         self.tExref.set_array(ary)
         self.ImLoaded = True
+        
+        
+        # self.tcExp = gpuarray.to_gpu(AllIm)
 
     def loadGs(self):
         if not self.GsGenerated:
             raise RuntimeError('Gs are not generated yet')
         self.tGref.set_array(cuda.matrix_to_array(np.transpose(self.Gs).astype(np.float32), order='F'))
+        # self.tG = gpuarray.to_gpu(np.array(np.transpose(self.Gs).astype(np.float32), order='F'))
         self.GsLoaded = True
 
     def generateGs(self, pos, orien, avg_distortion):
@@ -199,10 +203,13 @@ class Initializer:
                           np.int32(5),np.float32(self.Cfg.omgInterval),
                           block=(self.NumG, 1, 1), grid=(NumD, 1))
         xtmp = XD.get().reshape((-1, self.NumG))
+        
         ytmp = YD.get().reshape((-1, self.NumG))
         otmp = OffsetD.get().reshape((-1, self.NumG))
         maskH = MaskD.get().reshape(-1, self.NumG)
+        
         return xtmp, ytmp, otmp, maskH
+    
 
     def simMap(self, tmpxx, tmpyy, AllMaxS, blur=False, dtype=np.uint32):
         if self.GsLoaded == False:

@@ -2,6 +2,7 @@ import numpy as np
 from fractions import Fraction
 from math import floor
 from matplotlib import path
+import json
 
 
 def frankie_angles_from_g(g, verbo=True, energy=50):
@@ -23,6 +24,7 @@ def frankie_angles_from_g(g, verbo=True, energy=50):
     -------------
     2Theta and eta are in radian, chi, omega_a and omega_b are in degree. omega_a corresponding to positive y direction scatter, omega_b is negative y direction scatter.
     """
+    
     ghat = g / np.linalg.norm(g);
     sin_theta = np.linalg.norm(g) / (energy * 0.506773182) / 2
     cos_theta = np.sqrt(1 - sin_theta ** 2);
@@ -64,7 +66,20 @@ def frankie_angles_from_g(g, verbo=True, energy=50):
 class Detector:
     def __init__(self, psizeJ=0.00148, psizeK=0.00148, pnJ=2048, pnK=2048,
                  J=0, K=0, trans=np.array([0, 0, 0]),
-                 tilt=np.eye(3)):
+                 tilt=np.eye(3),param_file=False):
+        if param_file:
+            with open(param_file,'r') as file:
+                det_params = json.load(file)
+            psizeJ = det_params['psizeJ']
+            psizeK = det_params['psizeK']
+            J = np.array(det_params['J'])
+            K = np.array(det_params['K'])
+            pnK = det_params['pnK']
+            pnJ = det_params['pnJ']
+            trans = np.array(det_params['trans_vec'])
+            tilt = np.array(det_params['tilt'])
+            
+        
         self.__Norm = np.array([0, 0, 1])
         self.__CoordOrigin = np.array([0., 0., 0.])
         self.__Jvector = np.array([1, 0, 0])
@@ -95,6 +110,7 @@ class Detector:
     def Move(self,J,K,trans,tilt):
         self.__CoordOrigin-=J*self.__Jvector*self.__PixelJ+K*self.__Kvector*self.__PixelK
         self.__CoordOrigin=tilt.dot(self.__CoordOrigin)+trans
+        
         self.__Norm=tilt.dot(self.__Norm)
         self.__Jvector=tilt.dot(self.__Jvector)
         self.__Kvector=tilt.dot(self.__Kvector)
@@ -157,9 +173,18 @@ class Detector:
 
 
 class CrystalStr:
-    def __init__(self, material='new'):
+    def __init__(self, material='new',cryst_file=None):
         self.AtomPos = []
         self.AtomZs = []
+        if material=='new' and cryst_file is not None:
+            with open(cryst_file,'r') as file:
+                info = json.load(file)
+            self.PrimA = np.array(info['A'])
+            self.PrimB = np.array(info['B'])
+            self.PrimC = np.array(info['C'])
+            for atom in info['atom_pos']:
+                self.addAtom(atom[0],atom[1])
+            
         if material == 'gold':
             self.PrimA = 4.08 * np.array([1, 0, 0])
             self.PrimB = 4.08 * np.array([0, 1, 0])
