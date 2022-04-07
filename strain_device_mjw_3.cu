@@ -204,7 +204,7 @@ extern "C" __global__ void Hit_Score(float *afscore,
         const int* __restrict__ aiX, const int*  __restrict__ aiY, 
         const int* __restrict__  aiOffset, const bool*  __restrict__ abMask, const bool*  __restrict__ abtrueMask,
         const float* __restrict__ MaxInten,
-         int iNumG, int iNumD, int iNumFrame, unsigned int *tcExpData){
+         int iNumG, int iNumD, int *window, unsigned int *tcExpData){
 
     int i=blockIdx.x*blockDim.x+threadIdx.x;
     
@@ -216,7 +216,7 @@ extern "C" __global__ void Hit_Score(float *afscore,
             if(!abtrueMask[tmpIdx]){ftmpScore=0.5;}
             else if(!abMask[tmpIdx]){ftmpScore=0.0;}
             else{
-                ftmpScore= tcExpData[aiY[tmpIdx]*iNumG*45*300 + aiX[tmpIdx]*iNumG*45 + (jj*iNumFrame+aiOffset[tmpIdx])];
+                ftmpScore= tcExpData[aiY[tmpIdx]*iNumG*window[2]*window[0] + aiX[tmpIdx]*iNumG*window[2] + (jj*window[2]+aiOffset[tmpIdx])];
                 ftmpScore/=MaxInten[jj];
             }
             afscore[i]+=ftmpScore;
@@ -225,37 +225,37 @@ extern "C" __global__ void Hit_Score(float *afscore,
 }
 
 extern "C" __global__ void KL_total(float *afKL,
-        const float *realMapLog, const float *fakeMap,int jj, int iNumG, int iNumFrame){
+        const float *realMapLog, const float *fakeMap,int jj, int iNumG,  int *window){
     int j=threadIdx.x;
     int i=blockIdx.x;
-    if(i<300*160&& j<iNumFrame){
-        unsigned int pixelIdx=i*iNumG*iNumFrame+j+jj*iNumFrame;
+    if(i<window[0]*window[1]&& j<window[2]){
+        unsigned int pixelIdx=i*iNumG*window[2]+j+jj*window[2];
         float fake=fakeMap[pixelIdx];
         float realLog=realMapLog[pixelIdx];
-        afKL[i+j*300*160]=fake*logf(fake)-fake*realLog;
+        afKL[i+j*window[0]*window[1]]=fake*logf(fake)-fake*realLog;
     }
 }
 
 extern "C" __global__ void L1_total(float *afL1,
-        const float *realMap, const float *fakeMap,int jj, int iNumG, int iNumFrame){
+        const float *realMap, const float *fakeMap,int jj, int iNumG, int *window){
     int j=threadIdx.x;
     int i=blockIdx.x;
-    if(i<300*160&& j<iNumFrame){
-        unsigned int pixelIdx=i*iNumG*iNumFrame+j+jj*iNumFrame;
+    if(i<window[0]*window[1]&& j<window[2]){
+        unsigned int pixelIdx=i*iNumG*window[2]+j+jj*window[2];
         float fake=fakeMap[pixelIdx];
         float real=realMap[pixelIdx];
-        afL1[i+j*300*160]=fminf(fake,fabsf(fake-real));
+        afL1[i+j*window[0]*window[1]]=fminf(fake,fabsf(fake-real));
     }
 }
 
 
 extern "C" __global__ void ChangeOne(const int *aiX, const int *aiY, const int *aiOffset, const bool *abMask, const bool *abtrueMask,
         float* __restrict__ fakeMap,
-        int iNumG, int iNumFrame,float epsilon, int one){
+        int iNumG, float epsilon, int one,int *window){
     int i=blockIdx.x*blockDim.x+threadIdx.x;// id of G vector
     if(i<iNumG){
         if(abMask[i] && abtrueMask[i]){
-            unsigned int pixelIdx=aiY[i]*300*iNumG*iNumFrame+aiX[i]*iNumG*iNumFrame+aiOffset[i]+iNumFrame*i;
+            unsigned int pixelIdx=aiY[i]*window[0]*iNumG*window[2]+aiX[i]*iNumG*window[2]+aiOffset[i]+window[2]*i;
             fakeMap[pixelIdx]=fmaxf(fakeMap[pixelIdx]+one,epsilon);
         }
     }
@@ -266,7 +266,7 @@ extern "C" __global__ void KL_diff(float *afKLdiff,
         const int* __restrict__ aiX, const int*  __restrict__ aiY, 
         const int* __restrict__  aiOffset, const bool*  __restrict__ abMask, const bool*  __restrict__ abtrueMask,
         const float* __restrict__ realMapLog, const float* __restrict__ fakeMap,
-        int iNumG, int iNumD, int iNumFrame){
+        int iNumG, int iNumD, int *window){
     int i=blockIdx.x * blockDim.x + threadIdx.x; // id of distortion matrix
     if(i<iNumD){
         afKLdiff[i]=0;
@@ -276,7 +276,7 @@ extern "C" __global__ void KL_diff(float *afKLdiff,
             if(!abtrueMask[tmpIdx]){ftmp=0.0;}//hit outside of Detector
             else if(!abMask[tmpIdx]){ftmp=20;}//hit outside of Window
             else{
-                unsigned int pixelIdx=aiY[tmpIdx]*300*iNumG*iNumFrame+aiX[tmpIdx]*iNumG*iNumFrame+aiOffset[tmpIdx]+iNumFrame*jj;
+                unsigned int pixelIdx=aiY[tmpIdx]*window[0]*iNumG*window[2]+aiX[tmpIdx]*iNumG*window[2]+aiOffset[tmpIdx]+window[2]*jj;
                 float fake=fakeMap[pixelIdx];
                 float realLog=realMapLog[pixelIdx];
                 ftmp=(fake+1)*logf(fake+1)-realLog-fake*logf(fake);
@@ -291,7 +291,7 @@ extern "C" __global__ void L1_diff(float *afL1diff,
         const int* __restrict__ aiX, const int*  __restrict__ aiY, 
         const int* __restrict__  aiOffset, const bool*  __restrict__ abMask, const bool*  __restrict__ abtrueMask,
         const float* __restrict__ realMap, const float* __restrict__ fakeMap,
-        int iNumG, int iNumD, int iNumFrame){
+        int iNumG, int iNumD, int *window){
     int i=blockIdx.x * blockDim.x + threadIdx.x; // id of distortion matrix
     if(i<iNumD){
         afL1diff[i]=0;
@@ -301,7 +301,7 @@ extern "C" __global__ void L1_diff(float *afL1diff,
             if(!abtrueMask[tmpIdx]){ftmp=0.0;}//hit outside of Detector
             else if(!abMask[tmpIdx]){ftmp=10;}//hit outside of Window
             else{
-                unsigned int pixelIdx=aiY[tmpIdx]*300*iNumG*iNumFrame+aiX[tmpIdx]*iNumG*iNumFrame+aiOffset[tmpIdx]+iNumFrame*jj;
+                unsigned int pixelIdx=aiY[tmpIdx]*window[0]*iNumG*window[2]+aiX[tmpIdx]*iNumG*window[2]+aiOffset[tmpIdx]+window[2]*jj;
                 float fake=fakeMap[pixelIdx];
                 float real=realMap[pixelIdx];
                 ftmp=fabsf(fake+1-real)-fabsf(fake-real);

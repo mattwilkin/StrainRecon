@@ -33,7 +33,7 @@ def CrossEntropyMethod(recon, x, y,
         args = [XD, YD, OffsetD, MaskD, TrueMaskD,
                               x, y, recon.afDetInfoD, np.array([int(S_gpu)], dtype=np.uint64),
                               recon.whichOmegaD, np.array(NumD).astype(np.int32), np.array(recon.NumG).astype(np.int32),
-                              np.array(recon.Cfg.energy).astype(np.float32), np.array(45).astype(np.int32), recon.LimD, 
+                              np.array(recon.Cfg.energy).astype(np.float32), np.array(recon.Cfg.window[2]).astype(np.int32), recon.LimD, 
                               np.array(5).astype(np.int32), np.array(recon.Cfg.omgInterval).astype(np.float32),
                               recon.tG]
         
@@ -43,7 +43,7 @@ def CrossEntropyMethod(recon, x, y,
         # Hit Fun ##################################################################################################
 
         args = [scoreD,XD, YD, OffsetD, MaskD, TrueMaskD,
-                       recon.MaxIntD, np.array(recon.NumG).astype(np.int32), np.array(NumD).astype(np.int32), np.array(45).astype(np.int32),recon.tcExp]
+                       recon.MaxIntD, np.array(recon.NumG).astype(np.int32), np.array(NumD).astype(np.int32), recon.windowD,recon.tcExp]
             
         
         err = run_cuda_function(recon.hit_func,args,(int(NumD/BlockSize+1),1,1),(BlockSize,1,1))
@@ -88,7 +88,7 @@ def ChangeOneVoxel_KL(recon, x, y, mean, realMapsLogD, falseMapsD,
     args = [XD, YD, OffsetD, MaskD, TrueMaskD,
                           x, y, recon.afDetInfoD, np.array([int(S_gpu)], dtype=np.uint64),
                           recon.whichOmegaD, np.array(1).astype(np.int32), np.array(recon.NumG).astype(np.int32),
-                          np.array(recon.Cfg.energy).astype(np.float32), np.array(45).astype(np.int32), recon.LimD, 
+                          np.array(recon.Cfg.energy).astype(np.float32), np.array(recon.Cfg.window[2]).astype(np.int32), recon.LimD, 
                           np.array(5).astype(np.int32), np.array(recon.Cfg.omgInterval).astype(np.float32),
                           recon.tG]
 
@@ -102,8 +102,8 @@ def ChangeOneVoxel_KL(recon, x, y, mean, realMapsLogD, falseMapsD,
     # OneFun ###################################################################################
     
     args = [XD, YD, OffsetD, MaskD, TrueMaskD,
-                   falseMapsD, np.array(recon.NumG).astype(np.int32), np.array(45).astype(np.int32),
-                   np.array(epsilon).astype(np.float32), np.array(-1).astype(np.int32)]
+                   falseMapsD, np.array(recon.NumG).astype(np.int32),
+                   np.array(epsilon).astype(np.float32), np.array(-1).astype(np.int32),recon.windowD]
     
     
     err = run_cuda_function(recon.One_func,args,(1,1,1),(recon.NumG,1,1))
@@ -125,7 +125,7 @@ def ChangeOneVoxel_KL(recon, x, y, mean, realMapsLogD, falseMapsD,
         args = [XD, YD, OffsetD, MaskD, TrueMaskD,
                               x, y, recon.afDetInfoD, np.array([int(S_gpu)], dtype=np.uint64),
                               recon.whichOmegaD, np.array(NumD).astype(np.int32), np.array(recon.NumG).astype(np.int32),
-                              np.array(recon.Cfg.energy).astype(np.float32), np.array(45).astype(np.int32), recon.LimD, 
+                              np.array(recon.Cfg.energy).astype(np.float32), np.array(recon.Cfg.window[2]).astype(np.int32), recon.LimD, 
                               np.array(5).astype(np.int32), np.array(recon.Cfg.omgInterval).astype(np.float32),
                               recon.tG]
 
@@ -135,7 +135,7 @@ def ChangeOneVoxel_KL(recon, x, y, mean, realMapsLogD, falseMapsD,
         # KL ###################################################################################
         args = [diffD,XD, YD, OffsetD, MaskD, TrueMaskD,
                            realMapsLogD, falseMapsD,
-                           np.array(recon.NumG).astype(np.int32), np.array(NumD).astype(np.int32), np.array(45).astype(np.int32)]
+                           np.array(recon.NumG).astype(np.int32), np.array(NumD).astype(np.int32),recon.windowD]
         
         err = run_cuda_function(recon.KL_diff_func,args,(int(NumD / BlockSize + 1),1,1),(BlockSize,1,1))       
         diffH = diffD.get()
@@ -161,7 +161,7 @@ def ChangeOneVoxel_KL(recon, x, y, mean, realMapsLogD, falseMapsD,
     args = [XD, YD, OffsetD, MaskD, TrueMaskD,
                           x, y, recon.afDetInfoD, np.array([int(S_gpu)], dtype=np.uint64),
                           recon.whichOmegaD, np.array(1).astype(np.int32), np.array(recon.NumG).astype(np.int32),
-                          np.array(recon.Cfg.energy).astype(np.float32), np.array(45).astype(np.int32), recon.LimD, 
+                          np.array(recon.Cfg.energy).astype(np.float32), np.array(recon.Cfg.window[2]).astype(np.int32), recon.LimD, 
                           np.array(5).astype(np.int32), np.array(recon.Cfg.omgInterval).astype(np.float32),
                           recon.tG]
     
@@ -170,15 +170,15 @@ def ChangeOneVoxel_KL(recon, x, y, mean, realMapsLogD, falseMapsD,
     # KL ####################################################################################
     args = [diffD,XD, YD, OffsetD, MaskD, TrueMaskD,
                        realMapsLogD, falseMapsD,
-                       np.array(recon.NumG).astype(np.int32), np.array(1).astype(np.int32), np.array(45).astype(np.int32)]
+                       np.array(recon.NumG).astype(np.int32), np.array(1).astype(np.int32),recon.windowD]
 
     err = run_cuda_function(recon.KL_diff_func,args,(int(NumD / BlockSize + 1),1,1),(BlockSize,1,1))   
     diffH = diffD.get()
     
     #One Fun ######################################################################################
     args = [XD, YD, OffsetD, MaskD, TrueMaskD,
-                   falseMapsD, np.array(recon.NumG).astype(np.int32), np.array(45).astype(np.int32),
-                   np.array(epsilon).astype(np.float32), np.array(+1).astype(np.int32)]
+                   falseMapsD, np.array(recon.NumG).astype(np.int32), 
+                   np.array(epsilon).astype(np.float32), np.array(+1).astype(np.int32),recon.windowD]
     err = run_cuda_function(recon.One_func,args,(1,1,1),(recon.NumG,1,1))
     
     return cov, mean, diffH[0] - diff_init

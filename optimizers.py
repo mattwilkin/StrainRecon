@@ -10,12 +10,10 @@ def CrossEntropyMethod(recon, x, y,
         recon.loadIm()
     if not recon.GsLoaded:
         recon.loadGs()
-    
+
     for ii in range(MaxIter):
-        np.random.seed(ii)
         S = np.random.multivariate_normal(
             np.zeros(9), cov, size=(NumD)).reshape((NumD, 3, 3), order='C') + np.tile(mean, (NumD, 1, 1))
-        S = np.ones(S.shape)
         cuda.memcpy_htod(S_gpu, S.ravel().astype(np.float32))
 
         recon.sim_strain_func(XD, YD, OffsetD, MaskD, TrueMaskD,
@@ -61,15 +59,11 @@ def ChangeOneVoxel_KL(recon, x, y, mean, realMapsLogD, falseMapsD,
                    np.float32(epsilon), np.int32(-1),  # minus one!!
                    block=(recon.NumG, 1, 1), grid=(1, 1))
     # find a better distortion matrix
-    
     for ii in range(MaxIter):
-        
         S = np.empty((NumD, 3, 3), dtype=np.float32)
         S[0, :, :] = mean
-        np.random.seed(42)
         S[1:, :, :] = np.random.multivariate_normal(
             mean.ravel(), cov, size=(NumD - 1)).reshape((NumD - 1, 3, 3), order='C')
-        
         cuda.memcpy_htod(S_gpu, S.ravel().astype(np.float32))
         recon.sim_strain_func(XD, YD, OffsetD, MaskD, TrueMaskD,
                               np.float32(x), np.float32(y), recon.afDetInfoD, S_gpu,

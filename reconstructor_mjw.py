@@ -80,12 +80,12 @@ class Reconstructor:
         return AllMaxScore, AllMaxS
 
     def SimPhase1Result(self, tmpxx, tmpyy, AllMaxS, epsilon=1e-6):
-        falseMaps = self.recon.simMap(tmpxx, tmpyy, AllMaxS, blur=False, dtype=np.uint32)
+        falseMaps = self.recon.simMap(tmpxx, tmpyy, AllMaxS, blur=False, dtype=np.uint32)[0]
         
-        realMaps = np.zeros(shape=(160, 300, self.recon.NumG * 45), dtype=np.uint32)
+        realMaps = np.zeros(shape=(self.Cfg.window[1], self.Cfg.window[0], self.recon.NumG * self.Cfg.window[2]), dtype=np.uint32)
         for ii in range(self.recon.NumG):
             tmp = np.array(self.peakFile['Imgs']['Im{0:d}'.format(ii)])
-            realMaps[:tmp.shape[0], :tmp.shape[1], ii * 45:(ii + 1) * 45] = tmp
+            realMaps[:tmp.shape[0], :tmp.shape[1], ii * self.Cfg.window[2]:(ii + 1) * self.Cfg.window[2]] = tmp
 
         self.falseMapsD = gpuarray.to_gpu((falseMaps.ravel() + epsilon).astype(np.float32))
         self.realMapsLogD = gpuarray.to_gpu(np.log(realMaps.ravel() + epsilon).astype(np.float32))
@@ -97,11 +97,11 @@ class Reconstructor:
     def KL_eachG(self):
         KLdivergences = np.empty(self.recon.NumG)
         for ii in range(self.recon.NumG):
-            KLD = gpuarray.empty(300 * 160 * 45,dtype=np.float32)
+            KLD = gpuarray.empty(self.Cfg.window[0] * self.Cfg.window[1] * self.Cfg.window[2],dtype=np.float32)
             
             self.recon.KL_total_func(KLD, self.realMapsLogD, self.falseMapsD,
-                                     np.int32(ii), np.int32(self.recon.NumG), np.int32(45),
-                                     block=(45, 1, 1), grid=(300 * 160, 1))
+                                     np.int32(ii), np.int32(self.recon.NumG), np.int32(self.Cfg.window[2]),
+                                     block=(self.Cfg.window[2], 1, 1), grid=(self.Cfg.window[0] * self.Cfg.window[1], 1))
             KLH = KLD.get()
             KLdivergences[ii] = np.sum(KLH)
         return KLdivergences

@@ -32,7 +32,7 @@ class Initializer:
         self.ImLoaded = False
         self.GsLoaded = False
         self.GsGenerated = False
-
+        self.windowD = gpuarray.to_gpu(np.array(self.Cfg.window).astype(np.int32))
         # Det parameters
         self.Det = Gsim.Detector(psizeJ=Cfg.pixelSize / 1000.0,
                                  psizeK=Cfg.pixelSize / 1000.0,
@@ -73,6 +73,7 @@ class Initializer:
             self.MaxIntD = gpuarray.to_gpu(self.MaxInt)
             self.Gs = np.array(f['Gs'], dtype=np.float32)
             self.NumG = len(self.Gs)
+            print(self.NumG)
             self.orienM = np.array(f['OrienM'])
             self.avg_distortion = np.array(f['avg_distortion'])
             self.GsGenerated = True
@@ -80,10 +81,10 @@ class Initializer:
     # transfer the ExpImgs and all Gs to texture memory
     def loadIm(self):
         f = h5py.File(self.Cfg.peakFile, 'r')
-        AllIm = np.zeros(shape=(160, 300, self.NumG * 45), dtype=np.uint32, order='F')
+        AllIm = np.zeros(shape=(self.Cfg.window[1], self.Cfg.window[0], self.NumG * self.Cfg.window[2]), dtype=np.uint32, order='F')
         for ii in range(self.NumG):
             tmp = np.array(f['Imgs']['Im{0:d}'.format(ii)])
-            AllIm[:tmp.shape[0], :tmp.shape[1], ii * 45:(ii + 1) * 45] = tmp
+            AllIm[:tmp.shape[0], :tmp.shape[1], ii * self.Cfg.window[2]:(ii + 1) * self.Cfg.window[2]] = tmp
 
         self.ImLoaded = True
         Im = np.array(AllIm).astype(np.uint32)
@@ -117,11 +118,11 @@ class Initializer:
         dx = 150
         dy = 80
         for ii in range(self.NumG):
-            omegid = int((180 - Ps[ii, 2]) / self.Cfg.omgInterval) - 22  # becuase store 45 frames
+            omegid = int((self.Cfg.omgRange[2] - Ps[ii, 2]) / self.Cfg.omgInterval) - 22  # becuase store 45 frames
             if omegid < 0:
-                omegid += int(180 / self.Cfg.omgInterval)
-            elif omegid >= int(180 / self.Cfg.omgInterval):
-                omegid -= int(180 / self.Cfg.omgInterval)
+                omegid += int(self.Cfg.omgRange[2] / self.Cfg.omgInterval)
+            elif omegid >= int(self.Cfg.omgRange[2] / self.Cfg.omgInterval):
+                omegid -= int(self.Cfg.omgRange[2] / self.Cfg.omgInterval)
             x1 = int(2047 - Ps[ii, 0] - dx)
             y1 = int(Ps[ii, 1] - dy)
             x2 = x1 + 2 * dx
@@ -177,7 +178,7 @@ class Initializer:
         args = [XD, YD, OffsetD, MaskD, TrueMaskD,
                               xsD, ysD, self.afDetInfoD, ssD,
                               self.whichOmegaD, np.array(NumD).astype(np.int32), np.array(self.NumG).astype(np.int32),
-                              np.array(self.Cfg.energy).astype(np.float32), np.array(45).astype(np.int32), self.LimD, 
+                              np.array(self.Cfg.energy).astype(np.float32), np.array(self.Cfg.window[2]).astype(np.int32), self.LimD, 
                               np.array(5).astype(np.int32), np.array(self.Cfg.omgInterval).astype(np.float32),
                               self.tG]
         
@@ -195,15 +196,19 @@ class Initializer:
         if self.GsLoaded == False:
             self.loadGs()
         xtmp, ytmp, otmp, maskH = self.sim_pos_wrapper(tmpxx, tmpyy, AllMaxS)
-        res = np.zeros(shape=(160, 300, self.NumG * 45), dtype=dtype)
+        print(xtmp.shape)
+        res = np.zeros(shape=(self.Cfg.window[1], self.Cfg.window[0], self.NumG * self.Cfg.window[2]), dtype=dtype)
+        
+        
         for ii in range(self.NumG):
             tmpMask = maskH[:, ii]
             tmpX = xtmp[tmpMask, ii]
             tmpY = ytmp[tmpMask, ii]
             tmpO = otmp[tmpMask, ii]
-            myMaps = np.zeros((45, self.LimH[ii][3] - self.LimH[ii][2], self.LimH[ii][1] - self.LimH[ii][0]),
+            myMaps = np.zeros((self.Cfg.window[2], self.LimH[ii][3] - self.LimH[ii][2], self.LimH[ii][1] - self.LimH[ii][0]),
                               dtype=dtype)
-            for jj in range(45):
+            
+            for jj in range(self.Cfg.window[2]):
                 idx = np.where(tmpO == jj)[0]
                 if len(idx) == 0:
                     myMaps[jj] = 0
@@ -211,13 +216,45 @@ class Initializer:
                 myCounter = Counter(zip(tmpX[idx], tmpY[idx]))
                 val = list(myCounter.values())
                 xx, yy = zip(*(myCounter.keys()))
+
                 tmp = coo_matrix((val, (yy, xx)),
                                  shape=(
                                  self.LimH[ii][3] - self.LimH[ii][2], self.LimH[ii][1] - self.LimH[ii][0])).toarray()
+                
                 if blur:
                     myMaps[jj] = gaussian_filter(tmp, sigma=1, mode='nearest', truncate=4)
                 else:
                     myMaps[jj] = tmp
+                
             myMaps = np.moveaxis(myMaps, 0, 2)
-            res[:myMaps.shape[0], :myMaps.shape[1], ii * 45:(ii + 1) * 45] = myMaps
-        return res
+
+            res[:myMaps.shape[0], :myMaps.shape[1], ii * self.Cfg.window[2]:(ii + 1) * self.Cfg.window[2]] = myMaps
+        return res,[xtmp,ytmp,otmp,maskH]
+    
+#     def pair_pix_to_vox(self,xx,yy,ss):
+#         if not self.ImLoaded:
+#             self.loadIm()
+#         if not self.GsLoaded:
+#             self.loadGs()
+        
+#         for x,y,s in zip(xx,yy,ss):
+#             XD = gpuarray.empty(self.NumG , dtype=np.int32)
+#             YD = gpuarray.empty(self.NumG , dtype=np.int32)
+#             OffsetD = gpuarray.empty(self.NumG, dtype=np.int32)
+#             MaskD = gpuarray.empty(self.NumG, dtype=np.bool_)
+#             TrueMaskD = gpuarray.empty(self.NumG, dtype=np.bool_)
+#             S_gpu = gpuarray.to_gpu(s.ravel(order='C').astype(np.float32))
+#             x = np.array(x).astype(np.float32)
+#             y = np.array(y).astype(np.float32)
+
+#             args = [XD, YD, OffsetD, MaskD, TrueMaskD,
+#                           x, y, self.afDetInfoD, S_gpu,
+#                           self.whichOmegaD, np.array(1).astype(np.int32), np.array(self.NumG).astype(np.int32),
+#                           np.array(self.Cfg.energy).astype(np.float32), np.array(self.Cfg.window[2]).astype(np.int32), self.LimD, 
+#                           np.array(5).astype(np.int32), np.array(self.Cfg.omgInterval).astype(np.float32),
+#                           self.tG]
+
+
+#             err = run_cuda_function(self.sim_strain_func,args,(1,1,1),(self.NumG,1,1))
+#             print(err)
+#         return XD.get(),YD.get()

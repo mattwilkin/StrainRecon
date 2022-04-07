@@ -9,6 +9,7 @@ from initializer import Initializer
 import h5py
 import os
 import time
+
 import optimizers
 
 
@@ -82,9 +83,6 @@ class Reconstructor:
         self.falseMapsD = gpuarray.to_gpu((falseMaps.ravel() + epsilon).astype(np.float32))
         self.realMapsLogD = gpuarray.to_gpu(np.log(realMaps.ravel() + epsilon).astype(np.float32))
         self.realMapsD = gpuarray.to_gpu((realMaps.ravel() + epsilon).astype(np.float32))
-        # np.save('pc_falseMaps',self.falseMapsD.get())
-        # np.save('pc_realMapsLog',self.realMapsLogD.get())
-        # np.save('pc_realMaps',self.realMapsD.get())
         return
 
     def KL_eachG(self):
@@ -111,16 +109,12 @@ class Reconstructor:
         S_gpu = cuda.mem_alloc(NumD * 9 * 4)
         history = [0]
         acc = 0
-        
         for jj in range(iterN):
             print("{0:d}/{1:d}, loss={2:}".format(jj + 1, iterN, acc))
             if shuffle:
-                
                 order = np.random.permutation(len(tmpxx))
             else:
                 order = np.arange(len(tmpxx))
-            losses = []
-            iis = []
             for ii in order:
                 tmp = optimizers.ChangeOneVoxel_KL(self.recon,
                                                    tmpxx[ii], tmpyy[ii], AllMaxS[ii], self.realMapsLogD,
@@ -129,12 +123,8 @@ class Reconstructor:
                                                    NumD=NumD, numCut=numCut, cov=1e-6 * np.eye(9), MaxIter=3,
                                                    debug=False)
                 AllMaxS[ii] = tmp[1]
-                losses.append(tmp[2])
                 acc += tmp[2]
-                iis.append(ii)
                 history.append(acc)
-            np.save('pc_iis',np.stack(iis))
-            np.save('pc_loss',np.stack(losses))
         return AllMaxS, np.array(history)
 
     def Transform2RealS(self, AllMaxS):
