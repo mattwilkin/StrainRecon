@@ -182,7 +182,9 @@ class CrystalStr:
             self.PrimA = np.array(info['A'])
             self.PrimB = np.array(info['B'])
             self.PrimC = np.array(info['C'])
+            
             for atom in info['atom_pos']:
+                
                 self.addAtom(atom[0],atom[1])
             
         if material == 'gold':
